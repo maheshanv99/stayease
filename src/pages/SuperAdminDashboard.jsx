@@ -476,7 +476,7 @@ export default function SuperAdminDashboard() {
               <p style={styles.credTitle}>Login credentials — share with owner</p>
               <div style={styles.credRow}>
                 <span style={styles.credLabel}>App URL</span>
-                <span style={styles.credVal}>http://localhost:5173</span>
+                <span style={styles.credVal}>window.location.origin</span>
               </div>
               <div style={styles.credRow}>
                 <span style={styles.credLabel}>Email</span>
@@ -488,7 +488,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
             <button onClick={() => {
-              const text = `Welcome to StayEase!\n\nYour PG "${credentials.pgName}" is ready.\n\nLogin details:\nURL: http://localhost:5173\nEmail: ${credentials.email}\nPassword: ${credentials.password}\n\nPlease change your password after first login.`
+              const text = `Welcome to StayEase!\n\nYour PG "${credentials.pgName}" is ready.\n\nLogin details:\nURL: window.location.origin\nEmail: ${credentials.email}\nPassword: ${credentials.password}\n\nPlease change your password after first login.`
               navigator.clipboard.writeText(text)
             }} style={{ ...styles.primaryBtn, width: '100%', marginBottom: 8 }}>
               📋 Copy credentials to clipboard

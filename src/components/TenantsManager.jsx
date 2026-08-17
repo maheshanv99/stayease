@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import EmailOTPVerify from './EmailOTPVerify'
 
 const HANDOVER_CHECKLIST = [
   { key: 'key_returned',  label: 'Key / access card returned' },
@@ -32,8 +31,6 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
   const [vacateTenant, setVacateTenant]   = useState(null)
   const [vacateData, setVacateData]       = useState(null)
   const [inviteMsg, setInviteMsg]         = useState({})
-  const [showOTP, setShowOTP]             = useState(false)
-  const [emailVerified, setEmailVerified] = useState(false)
 
   // Add form
   const [fullName, setFullName]           = useState('')
@@ -58,8 +55,6 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
   const [eAdvanceNotes, setEAdvanceNotes] = useState('')
   const [editSaving, setEditSaving]       = useState(false)
   const [editError, setEditError]         = useState('')
-  const [editEmailVerified, setEditEmailVerified] = useState(false)
-  const [showEditOTP, setShowEditOTP]     = useState(false)
 
   // Vacate
   const [checklist, setChecklist]         = useState({})
@@ -91,21 +86,11 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
     e.preventDefault()
     setError('')
 
-    // Validate phone
     const phoneErr = validatePhone(phone)
     if (phoneErr) { setError(phoneErr); return }
 
-    // Validate email format
-    if (email) {
-      const emailErr = validateEmail(email)
-      if (emailErr) { setError(emailErr); return }
-
-      // If email not verified yet, show OTP
-      if (!emailVerified) {
-        setShowOTP(true)
-        return
-      }
-    }
+    const emailErr = validateEmail(email)
+    if (emailErr) { setError(emailErr); return }
 
     saveTenant()
   }
@@ -138,7 +123,7 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
   function resetAddForm() {
     setFullName(''); setPhone(''); setEmail(''); setSelectedRoomId('')
     setBedNumber(1); setAdvanceAmount(''); setAdvanceMonths(1)
-    setAdvanceNotes(''); setEmailVerified(false); setShowOTP(false); setError('')
+    setAdvanceNotes(''); setError('')
   }
 
   function startEdit(tenant) {
@@ -147,8 +132,7 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
     setEEmail(tenant.email || ''); setERoomId(tenant.room_id)
     setEBed(tenant.bed_number); setEAdvance(tenant.advance_amount || '')
     setEAdvanceNotes(tenant.advance_notes || '')
-    setEditEmailVerified(tenant.email ? true : false) // existing email already verified
-    setEditError(''); setShowEditOTP(false)
+    setEditError('')
   }
 
   function handleEditFormSubmit(e) {
@@ -158,16 +142,8 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
     const phoneErr = validatePhone(ePhone)
     if (phoneErr) { setEditError(phoneErr); return }
 
-    if (eEmail) {
-      const emailErr = validateEmail(eEmail)
-      if (emailErr) { setEditError(emailErr); return }
-
-      // If email changed from original, require re-verification
-      if (eEmail !== editTenant.email && !editEmailVerified) {
-        setShowEditOTP(true)
-        return
-      }
-    }
+    const emailErr = validateEmail(eEmail)
+    if (emailErr) { setEditError(emailErr); return }
 
     saveEdit()
   }
@@ -252,7 +228,12 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
                   Room {t.rooms?.room_number} · Bed {t.bed_number} · ₹{t.rooms?.base_rent?.toLocaleString('en-IN')}/mo
                   {t.advance_amount > 0 && <span style={styles.advanceBadge}> · Advance ₹{t.advance_amount.toLocaleString('en-IN')}</span>}
                 </p>
-                <p style={styles.tenantSub}>{t.phone}{t.email ? ` · ${t.email}` : ' · No email'}</p>
+                <p style={styles.tenantSub}>
+                  {t.phone}
+                  {t.email
+                    ? <> · {t.email}{!t.user_id && <span style={styles.unconfirmed}> · unconfirmed</span>}</>
+                    : ' · No email'}
+                </p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                 <button onClick={() => sendInvite(t)} style={styles.inviteBtn}>
@@ -282,24 +263,12 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
               </div>
 
               <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <input style={{ ...styles.input, flex: 1 }} type="email"
-                    placeholder="Email (for app invite)"
-                    value={email} onChange={e=>{ setEmail(e.target.value); setEmailVerified(false) }} />
-                  {email && !emailVerified && (
-                    <button type="button" onClick={() => setShowOTP(true)} style={styles.verifyBtn}>Verify</button>
-                  )}
-                  {emailVerified && <span style={styles.verifiedBadge}>✓ Verified</span>}
-                </div>
-                {showOTP && email && !emailVerified && (
-                  <div style={{ marginTop: 8 }}>
-                    <EmailOTPVerify
-                      email={email}
-                      onVerified={() => { setEmailVerified(true); setShowOTP(false) }}
-                      onCancel={() => setShowOTP(false)}
-                    />
-                  </div>
-                )}
+                <input style={styles.input} type="email"
+                  placeholder="Email (for app invite)"
+                  value={email} onChange={e=>setEmail(e.target.value)} />
+                <p style={styles.hint}>
+                  An invite goes to this address. It's confirmed once they set their password — the row shows ✓ Linked.
+                </p>
               </div>
 
               <label style={styles.label}>Room *</label>
@@ -343,7 +312,7 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button type="button" onClick={() => { setShowAddTenant(false); resetAddForm() }} style={styles.secondaryBtn}>Cancel</button>
                 <button type="submit" style={styles.primaryBtn} disabled={saving}>
-                  {saving ? 'Saving...' : email && !emailVerified ? 'Verify email first' : email ? 'Add & send invite' : 'Add tenant'}
+                  {saving ? 'Saving...' : email ? 'Add & send invite' : 'Add tenant'}
                 </button>
               </div>
             </form>
@@ -368,25 +337,11 @@ export default function TenantsManager({ propertyId, onTenantsChanged }) {
               </div>
               <div>
                 <label style={styles.label}>Email</label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <input style={{ ...styles.input, flex: 1 }} type="email" value={eEmail}
-                    onChange={e=>{ setEEmail(e.target.value); if (e.target.value !== editTenant.email) setEditEmailVerified(false) }} />
-                  {eEmail && eEmail !== editTenant.email && !editEmailVerified && (
-                    <button type="button" onClick={() => setShowEditOTP(true)} style={styles.verifyBtn}>Verify</button>
-                  )}
-                  {(editEmailVerified || eEmail === editTenant.email) && eEmail && (
-                    <span style={styles.verifiedBadge}>✓ Verified</span>
-                  )}
-                </div>
-                {showEditOTP && eEmail && (
-                  <div style={{ marginTop: 8 }}>
-                    <EmailOTPVerify
-                      email={eEmail}
-                      onVerified={() => { setEditEmailVerified(true); setShowEditOTP(false) }}
-                      onCancel={() => setShowEditOTP(false)}
-                    />
-                  </div>
-                )}
+                <input style={styles.input} type="email" value={eEmail}
+                  onChange={e=>setEEmail(e.target.value)} />
+                {editTenant.user_id
+                  ? <p style={styles.hintOk}>✓ Confirmed — tenant has activated this address.</p>
+                  : <p style={styles.hint}>Not yet confirmed. Changing it re-sends the invite.</p>}
               </div>
               <div>
                 <label style={styles.label}>Room</label>
@@ -507,8 +462,8 @@ const styles = {
   label: { fontSize:12, color:'#666', display:'block', marginBottom:4 },
   hint: { fontSize:11, color:'#999', margin:'3px 0 0' },
   input: { padding:'9px 12px', fontSize:14, borderRadius:8, border:'1px solid #ddd', width:'100%', boxSizing:'border-box' },
-  verifyBtn: { padding:'9px 14px', fontSize:13, fontWeight:500, borderRadius:8, border:'none', background:'#185FA5', color:'white', cursor:'pointer', whiteSpace:'nowrap' },
-  verifiedBadge: { fontSize:12, color:'#1D9E75', fontWeight:600, whiteSpace:'nowrap' },
+  hintOk: { fontSize:11, color:'#1D9E75', fontWeight:500, margin:'3px 0 0' },
+  unconfirmed: { color:'#854F0B', fontWeight:500 },
   advanceSection: { background:'#F1EFE8', borderRadius:10, padding:'12px 14px', display:'flex', flexDirection:'column', gap:8 },
   advanceSectionTitle: { margin:'0 0 4px', fontSize:13, fontWeight:600 },
   primaryBtn: { padding:'10px 18px', fontSize:14, fontWeight:500, borderRadius:8, border:'none', background:'#1D9E75', color:'white', cursor:'pointer', flex:1 },
